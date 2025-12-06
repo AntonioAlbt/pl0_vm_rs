@@ -4,13 +4,13 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[derive(Debug, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
-    PushValueLocalVar = 0x0, // (short offset)
-    PushValueMainVar = 0x1,  // (short offset)
-    PushValueGlobalVar = 0x2, // (short offset, short procedure)
-    PushAddressLocalVar = 0x3,  // (short offset)
-    PushAddressMainVar = 0x4, // (short offset)
-    PushAddressGlobalVar = 0x5, // (short offset, short procedure)
-    PushConstant = 0x6, // (short index)
+    PushValueLocalVar = 0x0, // (i16 offset)
+    PushValueMainVar = 0x1,  // (i16 offset)
+    PushValueGlobalVar = 0x2, // (i16 offset, i16 procedure)
+    PushAddressLocalVar = 0x3,  // (i16 offset)
+    PushAddressMainVar = 0x4, // (i16 offset)
+    PushAddressGlobalVar = 0x5, // (i16 offset, i16 procedure)
+    PushConstant = 0x6, // (i16 index)
     StoreValue = 0x7, // erwartet auf Stack: Wert, dann Zieladresse
     OutputValue = 0x8, // println
     InputValue = 0x9, // readln
