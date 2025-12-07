@@ -54,11 +54,13 @@ pub struct PL0VM {
 }
 
 impl PL0VM {
-    pub fn new(debug: bool) -> PL0VM { PL0VM {
-        program: vec![],
-        bits: B16(0),
-        debug,
-    } }
+    pub fn new(debug: bool) -> PL0VM {
+        PL0VM {
+            program: vec![],
+            bits: B16(0),
+            debug,
+        }
+    }
     fn data_size(&self) -> usize { match self.bits { B16(_) => 2, B32(_) => 4, B64(_) => 8 } }
 
     fn data_true(&self) -> Data { match self.bits { B16(_) => B16(1), B32(_) => B32(1), B64(_) => B64(1) } }
@@ -125,7 +127,13 @@ impl PL0VM {
         loop {
             let byte = self.program[pc];
             let opc = pc;
-            let op = OpCode::try_from(byte).expect("Unknown opcode");
+            let op = match OpCode::try_from(byte) {
+                Ok(op) => op,
+                Err(_) => {
+                    error(&format!("unknown opcode: 0x{:02X}", byte));
+                    break;
+                },
+            };
             print!("{:04X}: {:02X} {:<21} ", pc, byte, op);
             pc += 1;
             match op {
@@ -136,7 +144,14 @@ impl PL0VM {
                 },
                 OpCode::Jump | OpCode::JumpIfFalse => {
                     let arg = self.read_arg(pc);
-                    print!("{}{:0HEX_ARG_SIZE$X} => {:0HEX_ARG_SIZE$X}", if arg < 0 { "-" } else { "" }, arg.abs(), (pc + ARG_SIZE).checked_add_signed(arg as isize).expect("Invalid jump target!"));
+                    let target = match (pc + ARG_SIZE).checked_add_signed(arg as isize) {
+                        Some(target) => target,
+                        None => {
+                            error(&format!("invalid jump target: from {pc} jumping {arg}"));
+                            break;
+                        },
+                    };
+                    print!("{}{:0HEX_ARG_SIZE$X} => {:0HEX_ARG_SIZE$X}", if arg < 0 { "-" } else { "" }, arg.abs(), target);
                     pc += ARG_SIZE;
                 },
                 OpCode::PushValueGlobalVar | OpCode::PushAddressGlobalVar => {
@@ -157,7 +172,13 @@ impl PL0VM {
                 OpCode::PutString => {
                     let strb: Vec<_> = self.program.iter().skip(pc).take_while(|&&b| b != 0).map(|b| *b).collect();
                     pc += strb.len() + 1;
-                    let str = String::from_utf8(strb).expect("Invalid UTF-8");
+                    let str = match String::from_utf8(strb) {
+                        Ok(str) => str,
+                        Err(err) => {
+                            error(&format!("invalid string contents: {}", err));
+                            break;
+                        }
+                    };
                     print!("\"{str}\"");
                 }
                 _ => {},
@@ -242,7 +263,13 @@ impl PL0VM {
         loop {
             let byte = self.program[pc];
 
-            let op = OpCode::try_from(byte).unwrap_or(OpCode::EndOfCode);
+            let op = match OpCode::try_from(byte) {
+                Ok(op) => op,
+                Err(_) => {
+                    error(&format!("unknown opcode: 0x{:02X}", byte));
+                    break;
+                },
+            };
             if self.debug { print!("\t{pc:04X} => {:<21}", op); }
             pc += 1;
             match op {
@@ -256,9 +283,9 @@ impl PL0VM {
                 OpCode::ReturnProc => {
                     if cur_proc_i == 0 { break; } else {
                         stack.truncate(procedures[cur_proc_i].frame_ptr);
-                        let new_proc_i = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().unwrap());
-                        let new_fp = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().unwrap());
-                        let new_pc = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().unwrap());
+                        let new_proc_i = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().expect("jumping back failed - stack invalid"));
+                        let new_fp = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().expect("jumping back failed - stack invalid"));
+                        let new_pc = u64::from_le_bytes(stack.drain(stack.len() - 8..).collect::<Vec<u8>>().try_into().expect("jumping back failed - stack invalid"));
                         if self.debug { print!("pc: {pc} => {new_pc}, fp: {fp} => {new_fp}, cpi: {cur_proc_i} => {new_proc_i}"); }
                         pc = new_pc as usize;
                         fp = new_fp as usize;
@@ -462,7 +489,13 @@ impl PL0VM {
                 OpCode::PutString => {
                     let bytes: Vec<u8> = self.program[pc..].iter().take_while(|&&b| b != 0).map(|&b| b).collect();
                     pc += bytes.len() + 1;
-                    let str = String::from_utf8(bytes).expect("Invalid String data");
+                    let str = match String::from_utf8(bytes) {
+                        Ok(str) => str,
+                        Err(err) => {
+                            error(&format!("invalid string contents: {}", err));
+                            break;
+                        }
+                    };
                     if self.debug {
                         print!("\n{str}");
                     } else {
