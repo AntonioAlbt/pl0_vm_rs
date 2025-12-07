@@ -83,7 +83,9 @@ impl PL0VM {
                     2 => B16(0),
                     4 => B32(0),
                     8 => B64(0),
-                    _ => panic!("invalid architecture byte!"),
+                    _ => {
+                        return Ok(false);
+                    },
                 };
                 Ok(true)
             },
@@ -260,7 +262,7 @@ impl PL0VM {
         };
         let offsetted = |start: &usize, offset: isize| start.checked_add_signed(offset).expect("invalid variable offset");
 
-        let arch_bytes = self.read_arg(0);
+        let arch_bytes = self.read_arg(ARG_SIZE);
         if self.debug {
             println!("\t@0000: {:<21}{arch_bytes:04X} = {}", "Set Architecture", match arch_bytes {
                 2 => "16 bit",
@@ -270,7 +272,7 @@ impl PL0VM {
             });
         }
         if arch_bytes != 2 && arch_bytes != 4 && arch_bytes != 8 {
-            error(&format!("invalid architecture bytes: {arch_bytes:04X} (allowed: 2, 4, 8)"));
+            error(&format!("Invalid architecture bytes: {arch_bytes:04X} (allowed: 2, 4, 8)"));
             return;
         }
 
