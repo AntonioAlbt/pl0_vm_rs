@@ -19,6 +19,7 @@ struct Procedure {
     frame_ptr: usize,
 }
 
+// wrapper for differently sized integers
 #[derive(Debug, Clone)]
 enum Data {
     B16(i16),
@@ -235,24 +236,31 @@ impl PL0VM {
     pub fn execute(&self) {
         let (mut procedures, constants) = self.load_data();
 
-        // procedures.iter().for_each(|procedure| println!("{:?}", procedure));
-        // constants.iter().enumerate().for_each(|(i, constant)| println!("const {i}: {:?}", constant.i64()));
-
+        // --- execution state ---
+        // program counter = index of currently executed byte
         let mut pc = procedures[0].start_pos;
+        // stack = contains all dynamic runtime data
         let mut stack: Vec<u8> = vec![];
+        // frame pointer = index of start of current stack frame in vector stack
         let mut fp = 0usize;
+        // current procedure index = index of current procedure in vector procedures
         let mut cur_proc_i = 0usize;
 
+        // --- collection of functions used for execution ---
+        // pop one Data from the stack
         let pop_data = |stack: &mut Vec<u8>| -> Data {
             self.bytes_to_data(stack.drain(stack.len() - self.data_size()..).as_ref())
         };
+        // push a Data onto the stack
         let push_data = |stack: &mut Vec<u8>, data: Data| {
             stack.append(&mut data.to_bytes());
         };
+        // pop one argument from the bytecode, by increasing the program counter by ARG_SIZE
         let pop_argument = |pc: &mut usize| -> i16 {
             *pc += ARG_SIZE;
             self.read_arg(*pc - ARG_SIZE)
         };
+        // set the bytes at the specified position (fp) in the stack to the value in data
         let set_addr = |stack: &mut Vec<u8>, fp: &usize, data: &Data| {
             if stack.len() < (fp + self.data_size()) { stack.resize(fp + self.data_size(), 0); }
             let bytes = match data {
@@ -260,8 +268,10 @@ impl PL0VM {
             };
             stack.splice(fp..&(fp + self.data_size()), bytes);
         };
+        // calculate the address start + offset, with respect to types
         let offsetted = |start: &usize, offset: isize| start.checked_add_signed(offset).expect("invalid variable offset");
 
+        // --- architecture check ---
         let arch_bytes = self.read_arg(ARG_SIZE);
         if self.debug {
             println!("\t@0000: {:<21}{arch_bytes:04X} = {}", "Set Architecture", match arch_bytes {
@@ -276,9 +286,11 @@ impl PL0VM {
             return;
         }
 
+        // --- main execution loop ---
         loop {
             let byte = self.program[pc];
 
+            // try to get op code from current byte
             let op = match OpCode::try_from(byte) {
                 Ok(op) => op,
                 Err(_) => {
@@ -287,6 +299,7 @@ impl PL0VM {
                 },
             };
             if self.debug { print!("\t@{pc:04X}: {:<21}", op); }
+            // increase program counter already, so that next pop_argument call returns valid data
             pc += 1;
             match op {
                 OpCode::EntryProc => {
@@ -389,6 +402,7 @@ impl PL0VM {
                 OpCode::InputToAddr => {
                     let addr = pop_data(&mut stack);
                     if self.debug { println!("to address {}", addr.i64()); }
+                    // wait for user to input a valid number
                     'input_loop: loop {
                         let mut line = String::new();
                         stdin().lock().read_line(&mut line).expect("Input failed");
