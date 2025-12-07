@@ -1,11 +1,11 @@
-use std::fmt::{Debug, Display};
-use std::io::{stdin, BufRead};
 use crate::opcodes::OpCode;
 use crate::pl0_vm::Data::{B16, B32, B64};
+use std::fmt::Debug;
+use std::io::{stdin, BufRead};
 
 const ARG_SIZE: usize = 2;
 const HEX_ARG_SIZE: usize = ARG_SIZE * 2;
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Debug)]
 struct Procedure {
@@ -51,9 +51,13 @@ pub struct PL0VM {
 impl PL0VM {
     pub fn new() -> PL0VM { PL0VM {
         program: vec![],
-        bits: Data::B16(0),
+        bits: B16(0),
     } }
-    fn data_size(&self) -> usize { match self.bits { Data::B16(_) => 2, Data::B32(_) => 4, Data::B64(_) => 8 } }
+    fn data_size(&self) -> usize { match self.bits { B16(_) => 2, B32(_) => 4, B64(_) => 8 } }
+
+    fn data_true(&self) -> Data { match self.bits { B16(_) => B16(1), B32(_) => B32(1), B64(_) => B64(1) } }
+    fn data_false(&self) -> Data { match self.bits { B16(_) => B16(0), B32(_) => B32(0), B64(_) => B64(0) } }
+    fn data_bool(&self, val: bool) -> Data { match val { true => self.data_true(), false => self.data_false() } }
 
     pub fn from_file(filename: &str) -> Result<PL0VM, std::io::Error> {
         let mut pl0vm = PL0VM::new();
@@ -93,12 +97,13 @@ impl PL0VM {
         self.bytes_to_data(&self.program[offset..])
     }
 
-    pub fn debug_print(&self) {
+    pub fn print_analysis(&self) {
         let mut pc = 4;
         let mut procedure_count = self.read_arg(0);
-        println!("Procedure count: {}", procedure_count);
-        print!("Arch: ");
-        match self.read_arg(ARG_SIZE) {
+        print!("0000: Procedure count: {:04X} = {}, ", procedure_count, procedure_count);
+        let arch = self.read_arg(ARG_SIZE);
+        print!("Architecture: {:04X} = ", arch);
+        match arch {
             2 => println!("16 bit"),
             4 => println!("32 bit"),
             8 => println!("64 bit"),
@@ -115,7 +120,7 @@ impl PL0VM {
             let byte = self.program[pc];
             let opc = pc;
             let op = OpCode::try_from(byte).expect("Unknown opcode");
-            print!("{:04X}: {:02X} {:<20} ", pc - 4, byte, op);
+            print!("{:04X}: {:02X} {:<20} ", pc, byte, op);
             pc += 1;
             match op {
                 OpCode::PushValueLocalVar | OpCode::PushValueMainVar
@@ -125,7 +130,7 @@ impl PL0VM {
                 },
                 OpCode::Jump | OpCode::JumpIfFalse => {
                     let arg = self.read_arg(pc);
-                    print!("{}{:0HEX_ARG_SIZE$X}", if arg < 0 { "-" } else { "" }, arg.abs());
+                    print!("{}{:0HEX_ARG_SIZE$X} => {:0HEX_ARG_SIZE$X}", if arg < 0 { "-" } else { "" }, arg.abs(), (pc + ARG_SIZE).checked_add_signed(arg as isize).expect("Invalid jump target!"));
                     pc += ARG_SIZE;
                 },
                 OpCode::PushValueGlobalVar | OpCode::PushAddressGlobalVar => {
@@ -136,9 +141,11 @@ impl PL0VM {
                     rem_bytes = self.read_arg(pc);
                     print!("{:0HEX_ARG_SIZE$X}, ", rem_bytes);
                     pc += ARG_SIZE;
-                    print_arg(&mut pc, false);
+                    let pid = self.read_arg(pc);
+                    print!("{:0HEX_ARG_SIZE$X}, ", pid);
+                    pc += ARG_SIZE;
                     print_arg(&mut pc, true);
-                    print!(" <<< Procedure start");
+                    print!(" <<< Procedure start{}", if pid == 0 { " - main" } else { "" });
                     procedure_count -= 1;
                 }
                 OpCode::PutString => {
@@ -158,7 +165,8 @@ impl PL0VM {
         (0..((self.program.len() - pc) / self.data_size())).map(|i| self.read_data(pc + self.data_size() * i)).enumerate().for_each(|(i, constant)| {
             let ds2 = self.data_size() * 2;
             let c = constant.i64();
-            println!("Constant {:04}: 0x{:0ds2$X} = {}", i, c, c);
+            let cstr = format!("{:0ds2$X}", c);
+            println!("Constant {:04}: 0x{} = {}", i, &cstr[cstr.len() - ds2..], c);
         });
     }
 
@@ -196,14 +204,15 @@ impl PL0VM {
 
     //noinspection RsConstantConditionIf
     pub fn execute(&self) {
-        let (procedures, constants) = self.load_data();
+        let (mut procedures, constants) = self.load_data();
 
-        procedures.iter().for_each(|procedure| println!("{:?}", procedure));
-        constants.iter().enumerate().for_each(|(i, constant)| println!("const {i}: {:?}", constant.i64()));
+        // procedures.iter().for_each(|procedure| println!("{:?}", procedure));
+        // constants.iter().enumerate().for_each(|(i, constant)| println!("const {i}: {:?}", constant.i64()));
 
         let mut pc = procedures[0].start_pos;
         let mut stack: Vec<u8> = vec![];
         let mut fp = 0usize;
+        let mut cur_proc_i = 0usize;
 
         let pop_data = |stack: &mut Vec<u8>| -> Data {
             self.bytes_to_data(stack.drain(stack.len() - self.data_size()..).as_ref())
@@ -211,14 +220,18 @@ impl PL0VM {
         let push_data = |stack: &mut Vec<u8>, data: Data| {
             stack.append(&mut data.to_bytes());
         };
-        let read_arg = |pc: &mut usize| -> i16 {
+        let pop_argument = |pc: &mut usize| -> i16 {
             *pc += ARG_SIZE;
             self.read_arg(*pc - ARG_SIZE)
         };
-        let set_addr = |fp: &usize, stack: &mut Vec<u8>, data: &Data| {
+        let set_addr = |stack: &mut Vec<u8>, fp: &usize, data: &Data| {
             if stack.len() < (fp + self.data_size()) { stack.resize(fp + self.data_size(), 0); }
-            stack.splice(fp..&(fp + self.data_size()), data.i64().to_le_bytes());
+            let bytes = match data {
+                B16(v) => v.to_le_bytes().to_vec(), B32(v) => v.to_le_bytes().to_vec(), B64(v) => v.to_le_bytes().to_vec(),
+            };
+            stack.splice(fp..&(fp + self.data_size()), bytes);
         };
+        let offsetted = |start: &usize, offset: isize| start.checked_add_signed(offset).expect("invalid variable offset");
 
         loop {
             let byte = self.program[pc];
@@ -228,91 +241,205 @@ impl PL0VM {
             pc += 1;
             match op {
                 OpCode::EntryProc => {
-                    pc += ARG_SIZE * 3;
-                },
+                    pc += ARG_SIZE;
+                    let proc_i = pop_argument(&mut pc);
+                    let varlen = pop_argument(&mut pc) as usize;
+                    fp = procedures[proc_i as usize].frame_ptr;
+                    stack.resize(fp + varlen, 0);
+                }
                 OpCode::ReturnProc => {
-                    break;
-                },
-                OpCode::PushValueLocalVar => {}
-                OpCode::PushValueMainVar => {}
-                OpCode::PushValueGlobalVar => {}
-                OpCode::PushAddressLocalVar => {}
-                OpCode::PushAddressMainVar => {}
-                OpCode::PushAddressGlobalVar => {}
+                    if cur_proc_i == 0 { break; } else {
+                        todo!()
+                    }
+                }
+                OpCode::CallProc => {
+                    todo!()
+                }
+
+                OpCode::PushValueLocalVar => {
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&stack[offsetted(&fp, addr as isize)..]);
+                    push_data(&mut stack, data);
+                }
+                OpCode::PushValueMainVar => {
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&stack[offsetted(&procedures[0].frame_ptr, addr as isize)..]);
+                    push_data(&mut stack, data);
+                }
+                OpCode::PushValueGlobalVar => {
+                    let proc_index = pop_argument(&mut pc) as usize;
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&stack[offsetted(&procedures[proc_index].frame_ptr, addr as isize)..]);
+                    push_data(&mut stack, data);
+                }
+                OpCode::PushAddressLocalVar => {
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&offsetted(&fp, addr as isize).to_le_bytes());
+                    push_data(&mut stack, data);
+                }
+                OpCode::PushAddressMainVar => {
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&offsetted(&procedures[0].frame_ptr, addr as isize).to_le_bytes());
+                    push_data(&mut stack, data);
+                }
+                OpCode::PushAddressGlobalVar => {
+                    let proc_index = pop_argument(&mut pc) as usize;
+                    let addr = pop_argument(&mut pc);
+                    let data = self.bytes_to_data(&offsetted(&procedures[proc_index].frame_ptr, addr as isize).to_le_bytes());
+                    push_data(&mut stack, data);
+                }
                 OpCode::PushConstant => {
-                    let c = read_arg(&mut pc);
+                    let c = pop_argument(&mut pc);
                     let cd = constants[c as usize].clone();
                     if DEBUG { print!(" at {c} => {}", cd.i64()); }
                     push_data(&mut stack, cd);
                 }
-                OpCode::StoreValue => {}
+                OpCode::StoreValue => {
+                    let data = pop_data(&mut stack);
+                    let addr = pop_data(&mut stack).i64();
+                    if DEBUG { print!(" {:?} at {}", data, &offsetted(&fp, addr as isize)) }
+                    set_addr(&mut stack, &offsetted(&fp, addr as isize), &data);
+                }
+
                 OpCode::OutputValue => {
                     let data = pop_data(&mut stack);
-                    if DEBUG { print!(": {}", data.i64()); }
+                    if DEBUG { println!(": {}", data.i64()); }
                     println!("{}", data.i64());
                 }
                 OpCode::InputToAddr => {
                     let addr = pop_data(&mut stack);
-                    if DEBUG { print!(" to {}", addr.i64()); }
+                    if DEBUG { println!(" to {}? ", addr.i64()); }
                     let mut line = String::new();
                     stdin().lock().read_line(&mut line).expect("Input failed");
                     let input: i64 = line.trim().parse().expect("number input required");
-                    set_addr(&fp, &mut stack, &self.bytes_to_data(&input.to_le_bytes()));
+                    set_addr(&mut stack, &offsetted(&fp, addr.i64() as isize), &self.bytes_to_data(&input.to_le_bytes()));
                 }
+
                 OpCode::Minusify => {
                     let int = pop_data(&mut stack);
                     let data = match int {
                         B16(x) => B16(-x), B32(x) => B32(-x), B64(x) => B64(-x),
                     };
-                    if DEBUG { println!(" {} => {}", int.i64(), data.i64()); }
+                    if DEBUG { print!(" {} => {}", int.i64(), data.i64()); }
                     push_data(&mut stack, data);
                 }
-                OpCode::IsOdd => {}
+                OpCode::IsOdd => {
+                    let val = pop_data(&mut stack).i64() % 2 == 1;
+                    push_data(&mut stack, self.data_bool(val));
+                }
+
                 OpCode::OpAdd => {
-                    let val = pop_data(&mut stack).i64() + pop_data(&mut stack).i64();
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left + right;
+                    if DEBUG { print!(" {left} + {right} : {val}") }
                     push_data(&mut stack, match self.bits {
                         B16(_) => B16(val as i16), B32(_) => B32(val as i32), B64(_) => B64(val),
                     });
                 }
                 OpCode::OpSubtract => {
-                    let val = pop_data(&mut stack).i64() - pop_data(&mut stack).i64();
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left - right;
+                    if DEBUG { print!(" {left} - {right} : {val}") }
                     push_data(&mut stack, match self.bits {
                         B16(_) => B16(val as i16), B32(_) => B32(val as i32), B64(_) => B64(val),
                     });
                 }
                 OpCode::OpMultiply => {
-                    let val = pop_data(&mut stack).i64() * pop_data(&mut stack).i64();
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left * right;
+                    if DEBUG { print!(" {left} * {right} : {val}") }
                     push_data(&mut stack, match self.bits {
                         B16(_) => B16(val as i16), B32(_) => B32(val as i32), B64(_) => B64(val),
                     });
                 }
                 OpCode::OpDivide => {
-                    let val = pop_data(&mut stack).i64() / pop_data(&mut stack).i64();
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left / right;
+                    if DEBUG { print!(" {left} / {right} : {val}") }
                     push_data(&mut stack, match self.bits {
                         B16(_) => B16(val as i16), B32(_) => B32(val as i32), B64(_) => B64(val),
                     });
                 }
+
                 OpCode::CompareEq => {
-                    let val = pop_data(&mut stack).i64() * pop_data(&mut stack).i64();
-                    push_data(&mut stack, match self.bits {
-                        B16(_) => B16(val as i16), B32(_) => B32(val as i32), B64(_) => B64(val),
-                    });
+                    let val = pop_data(&mut stack).i64() == pop_data(&mut stack).i64();
+                    push_data(&mut stack, self.data_bool(val));
                 }
-                OpCode::CompareNotEq => {}
-                OpCode::CompareLT => {}
-                OpCode::CompareGT => {}
-                OpCode::CompareLTEq => {}
-                OpCode::CompareGTEq => {}
-                OpCode::CallProc => {}
-                OpCode::Jump => {}
-                OpCode::JumpIfFalse => {}
-                OpCode::PutString => {}
-                OpCode::Pop => {}
-                OpCode::Swap => {}
-                OpCode::EndOfCode => {}
-                OpCode::Put => {}
-                OpCode::Get => {}
-                OpCode::OpAddAddr => {}
+                OpCode::CompareNotEq => {
+                    let val = pop_data(&mut stack).i64() != pop_data(&mut stack).i64();
+                    push_data(&mut stack, self.data_bool(val));
+                }
+                OpCode::CompareLT => {
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left < right;
+                    if DEBUG { print!(" {left} < {right} : {val}") }
+                    push_data(&mut stack, self.data_bool(val));
+                }
+                OpCode::CompareGT => {
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left > right;
+                    if DEBUG { print!(" {left} > {right} : {val}") }
+                    push_data(&mut stack, self.data_bool(val));
+                }
+                OpCode::CompareLTEq => {
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left <= right;
+                    if DEBUG { print!(" {left} <= {right} : {val}") }
+                    push_data(&mut stack, self.data_bool(val));
+                }
+                OpCode::CompareGTEq => {
+                    let right = pop_data(&mut stack).i64();
+                    let left = pop_data(&mut stack).i64();
+                    let val = left >= right;
+                    if DEBUG { print!(" {left} >= {right} : {val}") }
+                    push_data(&mut stack, self.data_bool(val));
+                }
+
+                OpCode::Jump => {
+                    let offset = pop_argument(&mut pc);
+                    pc = offsetted(&pc, offset as isize);
+                }
+                OpCode::JumpIfFalse => {
+                    let dat = pop_data(&mut stack).i64();
+                    let offset = pop_argument(&mut pc);
+                    if DEBUG { print!(" - jumping: {}", dat == 0); }
+                    if dat == 0 {
+                        pc = offsetted(&pc, offset as isize);
+                        print!(" to {pc:04X}");
+                    }
+                }
+
+                OpCode::PutString => {
+                    let bytes: Vec<u8> = self.program[pc..].iter().take_while(|&&b| b != 0).map(|&b| b).collect();
+                    pc += bytes.len() + 1;
+                    if DEBUG { println!() }
+                    println!("{}", String::from_utf8(bytes).expect("Invalid String data"));
+                }
+
+                OpCode::Pop => {
+                    pop_data(&mut stack);
+                }
+                OpCode::Swap => {
+                    let offset = pop_data(&mut stack).i64();
+                    let data = self.bytes_to_data(&stack[offsetted(&fp, offset as isize)..]);
+                    if DEBUG { print!(" addr. {} => data {}", offsetted(&fp, offset as isize), data.i64()) }
+                    push_data(&mut stack, data);
+                }
+
+                OpCode::EndOfCode => {
+                    break;
+                }
+
+                OpCode::Put => { todo!() }
+                OpCode::Get => { todo!() }
+                OpCode::OpAddAddr => { todo!() }
             }
 
             if DEBUG { println!(); }
