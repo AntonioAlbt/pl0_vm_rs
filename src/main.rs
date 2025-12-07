@@ -2,6 +2,8 @@ use std::env;
 use std::process::exit;
 use crate::pl0_vm::PL0VM;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 mod pl0_vm;
 mod opcodes;
 
@@ -18,11 +20,13 @@ fn main() {
             debug = true;
         } else if arg == "--help" || arg == "-h" {
             println!("\
-Usage: {} [flags] <filename>
+Usage: pl0_vm_rs [flags] <filename>
 Flags:
   -a, --analyze\tOutput bytecode analysis information. (doesn't run the program)
   -d, --debug\tOutput debug information while running the program. (outputs operations being run, with additional information)
-  -h, --help\tDisplay this message and exit.", args[0]);
+  -h, --help\tDisplay this message and exit.
+
+pl0_vm_rs v{VERSION}");
             exit(0);
         } else {
             filename = Some(arg);
