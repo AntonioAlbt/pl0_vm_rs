@@ -118,7 +118,11 @@ impl PL0VM {
             2 => println!("16 bit"),
             4 => println!("32 bit"),
             8 => println!("64 bit"),
-            _ => (),
+            _ => println!("invalid"),
+        }
+        if arch != 2 && arch != 4 && arch != 8 {
+            error(&format!("Invalid architecture bytes: {arch:04X} (allowed: 2, 4, 8)"));
+            return;
         }
 
         let print_arg = |pc: &mut usize, last: bool| {
@@ -305,6 +309,10 @@ impl PL0VM {
                 OpCode::EntryProc => {
                     pc += ARG_SIZE;
                     let proc_i = pop_argument(&mut pc);
+                    if proc_i < 0 {
+                        error(&format!("tried to enter procedure with invalid ID: {proc_i}"));
+                        return;
+                    }
                     let varlen = pop_argument(&mut pc) as usize;
                     fp = procedures[proc_i as usize].frame_ptr;
                     stack.resize(fp + varlen, 0);
@@ -327,6 +335,10 @@ impl PL0VM {
                 }
                 OpCode::CallProc => {
                     let proc_id = pop_argument(&mut pc);
+                    if proc_id < 0 {
+                        error(&format!("tried to call procedure with invalid ID: {proc_id}"));
+                        return;
+                    }
                     stack.extend((pc as u64).to_le_bytes());
                     stack.extend((fp as u64).to_le_bytes());
                     stack.extend((cur_proc_i as u64).to_le_bytes());
@@ -339,12 +351,20 @@ impl PL0VM {
 
                 OpCode::PushValueLocalVar => {
                     let addr = pop_argument(&mut pc);
+                    if addr < 0 {
+                        error(&format!("tried to push value of local variable with invalid address: {addr}"));
+                        return;
+                    }
                     let data = self.bytes_to_data(&stack[offsetted(&fp, addr as isize)..]);
                     if self.debug { print!("took {} from address {}", data.i64(), offsetted(&fp, addr as isize)); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushValueMainVar => {
                     let addr = pop_argument(&mut pc);
+                    if addr < 0 {
+                        error(&format!("tried to push value of main variable with invalid address: {addr}"));
+                        return;
+                    }
                     let data = self.bytes_to_data(&stack[offsetted(&procedures[0].frame_ptr, addr as isize)..]);
                     if self.debug { print!("took {} from address {}", data.i64(), offsetted(&procedures[0].frame_ptr, addr as isize)); }
                     push_data(&mut stack, data);
@@ -352,18 +372,30 @@ impl PL0VM {
                 OpCode::PushValueGlobalVar => {
                     let proc_index = pop_argument(&mut pc) as usize;
                     let addr = pop_argument(&mut pc);
+                    if addr < 0 {
+                        error(&format!("tried to push value of variable from procedure {proc_index} with invalid address: {addr}"));
+                        return;
+                    }
                     let data = self.bytes_to_data(&stack[offsetted(&procedures[proc_index].frame_ptr, addr as isize)..]);
                     if self.debug { print!("took {} from address {}", data.i64(), offsetted(&procedures[proc_index].frame_ptr, addr as isize)); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushAddressLocalVar => {
                     let addr = pop_argument(&mut pc);
+                    if addr < 0 {
+                        error(&format!("tried to push address of local variable with invalid address: {addr}"));
+                        return;
+                    }
                     let data = self.bytes_to_data(&offsetted(&fp, addr as isize).to_le_bytes());
                     if self.debug { print!("pushed address {}", offsetted(&fp, addr as isize)); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushAddressMainVar => {
                     let addr = pop_argument(&mut pc);
+                    if addr < 0 {
+                        error(&format!("tried to push address of main variable with invalid address: {addr}"));
+                        return;
+                    }
                     let data = self.bytes_to_data(&offsetted(&procedures[0].frame_ptr, addr as isize).to_le_bytes());
                     if self.debug { print!("pushed address {}", offsetted(&procedures[0].frame_ptr, addr as isize)); }
                     push_data(&mut stack, data);
@@ -371,6 +403,10 @@ impl PL0VM {
                 OpCode::PushAddressGlobalVar => {
                     let addr = pop_argument(&mut pc);
                     let proc_index = pop_argument(&mut pc) as usize;
+                    if addr < 0 {
+                        error(&format!("tried to push address of variable from procedure {proc_index} with invalid address: {addr}"));
+                        return;
+                    }
                     if self.debug {
                         print!("from procedure {} take address {addr}", proc_index);
                         print!(" => pushed address {}", offsetted(&procedures[proc_index].frame_ptr, addr as isize));
@@ -380,6 +416,10 @@ impl PL0VM {
                 }
                 OpCode::PushConstant => {
                     let c = pop_argument(&mut pc);
+                    if c < 0 {
+                        error(&format!("tried to push value of constant with invalid index: {c}"));
+                        return;
+                    }
                     let cd = constants[c as usize].clone();
                     if self.debug { print!("constant {c} => pushing {}", cd.i64()); }
                     push_data(&mut stack, cd);
