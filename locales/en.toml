@@ -1,0 +1,56 @@
+help = """
+Usage: pl0_vm_rs [flags] <filename>
+Flags:
+  -a, --analyze\tOutput bytecode analysis information. (doesn't run the program)
+  -d, --debug\tOutput debug information while running the program. (outputs operations being run, with additional information)
+  -h, --help\tDisplay this message and exit.
+  --lang=[lang]\tSet language - supported for [lang]: de (German), en (English)
+
+pl0_vm_rs v%{version}
+"""
+no_filename = "Filename is missing. View usage information with: pl0_vm_rs --help"
+file_error = "Error when opening file: %{file}"
+
+[pl0]
+procedure_count = "Procedure count"
+arch = "Architecture"
+invalid = "invalid"
+arch_invalid = "Invalid architecture bytes: %{arch} (allowed: 2, 4, 8)"
+unknown_opcode = "unknown opcode: 0x%{op}"
+invalid_jump = "invalid jump target: from {pc} jumping {arg}"
+
+proc_start_main = "Procedure start - main"
+proc_start = "Procedure start"
+
+invalid_str = "invalid string contents: %{err}"
+constant = "Constant"
+set_arch = "Set Architecture"
+enter_invalid_proc = "tried to enter procedure with invalid ID: %{id}"
+call_invalid_proc = "tried to enter procedure with invalid ID: %{id}"
+reserved_varspace = "reserved %{bytes} bytes for variables"
+exiting = "exiting"
+
+invalid_local_var_val = "tried to push value of local variable with invalid address: %{addr}"
+invalid_main_var_val = "tried to push value of main variable with invalid address: %{addr}"
+invalid_global_var_val = "tried to push value of variable from procedure %{proc_index} with invalid address: %{addr}"
+invalid_local_var_addr = "tried to push address of local variable with invalid address: %{addr}"
+invalid_main_var_addr = "tried to push address of main variable with invalid address: %{addr}"
+invalid_global_var_addr = "tried to push value of variable from procedure %{proc_index} with invalid address: %{addr}"
+
+took_from_addr = "pushed value %{val} from address %{addr}"
+pushed_addr = "pushed address %{addr}"
+pushed_global_addr = "from procedure %{proc_index} take address %{addr} => pushed address %{push_addr}"
+
+invalid_constant = "tried to push value of constant with invalid index: %{c}"
+
+pushed_constant = "constant %{c} => pushing %{val}"
+stored_value = "value %{val} at address %{addr}"
+to_address = "to address %{addr}"
+invalid_number_input = "Invalid number input. Try again."
+
+jumping_to = "jumping to 0x%{pc}"
+jumping_if_bool = "jumping: %{bool}"
+jumping_if_where = " to 0x%{pc}"
+
+popped = "popped %{data}"
+swapped = "address %{addr} => data %{val}"

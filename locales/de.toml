@@ -1,0 +1,56 @@
+help = """
+Verwendung: pl0_vm_rs [Optionen] <Dateiname>
+Optionen:
+  -a, --analyze\tBytecode analysieren und Informationen darüber ausgeben. (führt das Programm nicht aus)
+  -d, --debug\tDebug-Informationen während der Programmausführung ausgeben. (gibt aus, welche Befehle gerade ausgeführt werden, mit erweiterten Informationen)
+  -h, --help\tDiese Nachricht ausgeben.
+  --lang=[lang]\tSprache setzen - unterstützt für [lang]: de (Deutsch), en (Englisch)
+
+pl0_vm_rs v%{version}
+"""
+no_filename = "Dateiname fehlt. Infos zur Verwendung mit: pl0_vm_rs --help"
+file_error = "Fehler beim Öffnen der Datei: %{file}"
+
+[pl0]
+procedure_count = "Prozeduren"
+arch = "Architektur"
+invalid = "ungültig"
+arch_invalid = "Ungültige Architektur-Bytes: %{arch} (erlaubt: 2, 4, 8)"
+unknown_opcode = "unbekannter Opcode: 0x%{op}"
+invalid_jump = "ungültiges Sprungziel: von {pc}, springt {arg}"
+
+proc_start_main = "Prozeduranfang - Main"
+proc_start = "Prozeduranfang"
+
+invalid_str = "ungültiger Stringinhalt (Fehler: %{err})"
+constant = "Konstante"
+set_arch = "Setze Architektur"
+enter_invalid_proc = "Versuch, Prozedur mit ungültiger ID zu betreten: %{id}"
+call_invalid_proc = "Versuch, Prozedur mit ungültiger ID aufzurufen: %{id}"
+reserved_varspace = "reserviert %{bytes} Bytes für Variablen"
+exiting = "verlässt"
+
+invalid_local_var_val = "versuchte, Wert von lokaler Variable mit ungültiger Adresse zu pushen: %{addr}"
+invalid_main_var_val = "versuchte, Wert von Main-Variable mit ungültiger Adresse zu pushen: %{addr}"
+invalid_global_var_val = "versuchte, Wert von Variable von Prozedur %{proc_index} mit ungültiger Adresse zu pushen: %{addr}"
+invalid_local_var_addr = "versuchte, Adresse von lokaler Variable mit ungültiger Adresse zu pushen: %{addr}"
+invalid_main_var_addr = "versuchte, Adresse von Main-Variable mit ungültiger Adresse zu pushen: %{addr}"
+invalid_global_var_addr = "versuchte, Adresse von Variable von Prozedur %{proc_index} mit ungültiger Adresse zu pushen: %{addr}"
+
+took_from_addr = "Wert %{val} von Adresse %{addr} gepushed"
+pushed_addr = "Adresse %{addr} gepushed"
+pushed_global_addr = "nehme Adresse %{addr} von Prozedur %{proc_index} => Adresse %{push_addr} gepushed"
+
+invalid_constant = "versuchte, Wert von Konstante mit ungültiger Adresse zu pushen: %{c}"
+
+pushed_constant = "Konstante %{c} => pushed Wert %{val}"
+stored_value = "Wert %{val} nach Adresse %{addr}"
+to_address = "zu Adresse %{addr}"
+invalid_number_input = "Ungültige Zahl eingegeben. Bitte erneut versuchen."
+
+jumping_to = "springt zu 0x%{pc}"
+jumping_if_bool = "springen: %{bool}"
+jumping_if_where = " zu 0x%{pc}"
+
+popped = "%{data} gepopped"
+swapped = "Adresse %{addr} => Wert %{val}"

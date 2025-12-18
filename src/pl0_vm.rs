@@ -2,6 +2,7 @@ use crate::opcodes::OpCode;
 use crate::pl0_vm::Data::{B16, B32, B64};
 use std::fmt::Debug;
 use std::io::{stderr, stdin, BufRead, Write};
+use rust_i18n::t;
 
 fn error(msg: &str) {
     stderr().write(msg.as_bytes()).expect("Could not write to stderr");
@@ -111,17 +112,17 @@ impl PL0VM {
     pub fn print_analysis(&self) {
         let mut pc = 4;
         let mut procedure_count = self.read_arg(0);
-        print!("0000: Procedure count: {:04X} = {}, ", procedure_count, procedure_count);
+        print!("0000: {}: {:04X} = {}, ", t!("pl0.procedure_count"), procedure_count, procedure_count);
         let arch = self.read_arg(ARG_SIZE);
-        print!("Architecture: {:04X} = ", arch);
+        print!("{}: {:04X} = ", t!("pl0.arch"), arch);
         match arch {
             2 => println!("16 bit"),
             4 => println!("32 bit"),
             8 => println!("64 bit"),
-            _ => println!("invalid"),
+            _ => println!("{}", t!("pl0.invalid")),
         }
         if arch != 2 && arch != 4 && arch != 8 {
-            error(&format!("Invalid architecture bytes: {arch:04X} (allowed: 2, 4, 8)"));
+            error(&t!("pl0.arch_invalid", arch = arch:{:04X}));
             return;
         }
 
@@ -137,7 +138,7 @@ impl PL0VM {
             let op = match OpCode::try_from(byte) {
                 Ok(op) => op,
                 Err(_) => {
-                    error(&format!("unknown opcode: 0x{:02X}", byte));
+                    error(&t!("pl0.unknown_opcode", op = byte:{:02X}));
                     break;
                 },
             };
@@ -154,7 +155,7 @@ impl PL0VM {
                     let target = match (pc + ARG_SIZE).checked_add_signed(arg as isize) {
                         Some(target) => target,
                         None => {
-                            error(&format!("invalid jump target: from {pc} jumping {arg}"));
+                            error(&t!("pl0.invalid_jump", pc = pc, arg = arg));
                             break;
                         },
                     };
@@ -173,7 +174,7 @@ impl PL0VM {
                     print!("{:0HEX_ARG_SIZE$X}, ", pid);
                     pc += ARG_SIZE;
                     print_arg(&mut pc, true);
-                    print!(" <<< Procedure start{}", if pid == 0 { " - main" } else { "" });
+                    print!(" <<< {}", if pid == 0 { t!("pl0.proc_start_main") } else { t!("pl0.proc_start") });
                     procedure_count -= 1;
                 }
                 OpCode::PutString => {
@@ -182,7 +183,7 @@ impl PL0VM {
                     let str = match String::from_utf8(strb) {
                         Ok(str) => str,
                         Err(err) => {
-                            error(&format!("invalid string contents: {}", err));
+                            error(&t!("pl0.invalid_str", err = err));
                             break;
                         }
                     };
@@ -200,7 +201,7 @@ impl PL0VM {
             let ds2 = self.data_size() * 2;
             let c = constant.i64();
             let cstr = format!("{:0ds2$X}", c);
-            println!("Constant {:04}: 0x{} = {}", i, &cstr[cstr.len() - ds2..], c);
+            println!("{} {:04}: 0x{} = {}", t!("pl0.constant"), i, &cstr[cstr.len() - ds2..], c);
         });
     }
 
@@ -215,7 +216,7 @@ impl PL0VM {
             let byte = self.program[pc];
             let opc = pc;
             pc += 1;
-            if rem_bytes == 0 && byte == OpCode::EntryProc.into() {
+            if rem_bytes == 0 && byte == <OpCode as Into<u8>>::into(OpCode::EntryProc) {
                 rem_bytes = self.read_arg(pc);
                 pc += ARG_SIZE;
                 let proc_id = self.read_arg(pc) as usize;
@@ -278,15 +279,15 @@ impl PL0VM {
         // --- architecture check ---
         let arch_bytes = self.read_arg(ARG_SIZE);
         if self.debug {
-            println!("\t@0000: {:<21}{arch_bytes:04X} = {}", "Set Architecture", match arch_bytes {
+            println!("\t@0000: {:<21}{arch_bytes:04X} = {}", t!("pl0.set_arch"), match arch_bytes {
                 2 => "16 bit",
                 4 => "32 bit",
                 8 => "64 bit",
-                _ => "invalid",
+                _ => &t!("pl0.invalid"),
             });
         }
         if arch_bytes != 2 && arch_bytes != 4 && arch_bytes != 8 {
-            error(&format!("Invalid architecture bytes: {arch_bytes:04X} (allowed: 2, 4, 8)"));
+            error(&t!("pl0.arch_invalid", arch = arch_bytes:{:04X}));
             return;
         }
 
@@ -298,7 +299,7 @@ impl PL0VM {
             let op = match OpCode::try_from(byte) {
                 Ok(op) => op,
                 Err(_) => {
-                    error(&format!("unknown opcode: 0x{:02X}", byte));
+                    error(&t!("pl0.unknown_opcode", op = byte:{:02X}));
                     break;
                 },
             };
@@ -310,17 +311,17 @@ impl PL0VM {
                     pc += ARG_SIZE;
                     let proc_i = pop_argument(&mut pc);
                     if proc_i < 0 {
-                        error(&format!("tried to enter procedure with invalid ID: {proc_i}"));
+                        error(&t!("pl0.enter_invalid_proc", id = proc_i));
                         return;
                     }
                     let varlen = pop_argument(&mut pc) as usize;
                     fp = procedures[proc_i as usize].frame_ptr;
                     stack.resize(fp + varlen, 0);
-                    if self.debug { print!("reserved {varlen} bytes for variables"); }
+                    if self.debug { print!("{}", t!("pl0.reserved_varspace", bytes = varlen)); }
                 }
                 OpCode::ReturnProc => {
                     if cur_proc_i == 0 {
-                        if self.debug { println!("exiting"); }
+                        if self.debug { println!("{}", t!("pl0.exiting")); }
                         break;
                     } else {
                         stack.truncate(procedures[cur_proc_i].frame_ptr);
@@ -336,7 +337,7 @@ impl PL0VM {
                 OpCode::CallProc => {
                     let proc_id = pop_argument(&mut pc);
                     if proc_id < 0 {
-                        error(&format!("tried to call procedure with invalid ID: {proc_id}"));
+                        error(&t!("pl0.call_invalid_proc", id = proc_id));
                         return;
                     }
                     stack.extend((pc as u64).to_le_bytes());
@@ -352,64 +353,63 @@ impl PL0VM {
                 OpCode::PushValueLocalVar => {
                     let addr = pop_argument(&mut pc);
                     if addr < 0 {
-                        error(&format!("tried to push value of local variable with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_local_var_val", addr = addr));
                         return;
                     }
                     let data = self.bytes_to_data(&stack[offsetted(&fp, addr as isize)..]);
-                    if self.debug { print!("took {} from address {}", data.i64(), offsetted(&fp, addr as isize)); }
+                    if self.debug { print!("{}", t!("pl0.took_from_addr", val = data.i64(), addr = offsetted(&fp, addr as isize))); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushValueMainVar => {
                     let addr = pop_argument(&mut pc);
                     if addr < 0 {
-                        error(&format!("tried to push value of main variable with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_main_var_val", addr = addr));
                         return;
                     }
                     let data = self.bytes_to_data(&stack[offsetted(&procedures[0].frame_ptr, addr as isize)..]);
-                    if self.debug { print!("took {} from address {}", data.i64(), offsetted(&procedures[0].frame_ptr, addr as isize)); }
+                    if self.debug { print!("{}", t!("pl0.took_from_addr", val = data.i64(), addr = offsetted(&procedures[0].frame_ptr, addr as isize))); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushValueGlobalVar => {
                     let proc_index = pop_argument(&mut pc) as usize;
                     let addr = pop_argument(&mut pc);
                     if addr < 0 {
-                        error(&format!("tried to push value of variable from procedure {proc_index} with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_global_var_val", addr = addr, proc_index = proc_index));
                         return;
                     }
                     let data = self.bytes_to_data(&stack[offsetted(&procedures[proc_index].frame_ptr, addr as isize)..]);
-                    if self.debug { print!("took {} from address {}", data.i64(), offsetted(&procedures[proc_index].frame_ptr, addr as isize)); }
+                    if self.debug { print!("{}", t!("pl0.took_from_addr", val = data.i64(), addr = offsetted(&procedures[proc_index].frame_ptr, addr as isize))); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushAddressLocalVar => {
                     let addr = pop_argument(&mut pc);
                     if addr < 0 {
-                        error(&format!("tried to push address of local variable with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_local_var_addr", addr = addr));
                         return;
                     }
                     let data = self.bytes_to_data(&offsetted(&fp, addr as isize).to_le_bytes());
-                    if self.debug { print!("pushed address {}", offsetted(&fp, addr as isize)); }
+                    if self.debug { print!("{}", t!("pl0.pushed_addr", addr = offsetted(&fp, addr as isize))); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushAddressMainVar => {
                     let addr = pop_argument(&mut pc);
                     if addr < 0 {
-                        error(&format!("tried to push address of main variable with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_main_var_addr", addr = addr));
                         return;
                     }
                     let data = self.bytes_to_data(&offsetted(&procedures[0].frame_ptr, addr as isize).to_le_bytes());
-                    if self.debug { print!("pushed address {}", offsetted(&procedures[0].frame_ptr, addr as isize)); }
+                    if self.debug { print!("{}", t!("pl0.pushed_addr", addr = offsetted(&procedures[0].frame_ptr, addr as isize))); }
                     push_data(&mut stack, data);
                 }
                 OpCode::PushAddressGlobalVar => {
                     let addr = pop_argument(&mut pc);
                     let proc_index = pop_argument(&mut pc) as usize;
                     if addr < 0 {
-                        error(&format!("tried to push address of variable from procedure {proc_index} with invalid address: {addr}"));
+                        error(&t!("pl0.invalid_global_var_addr", addr = addr, proc_index = proc_index));
                         return;
                     }
                     if self.debug {
-                        print!("from procedure {} take address {addr}", proc_index);
-                        print!(" => pushed address {}", offsetted(&procedures[proc_index].frame_ptr, addr as isize));
+                        print!("{}", t!("pl0.pushed_global_addr", proc_index = proc_index, addr = addr, push_addr = offsetted(&procedures[proc_index].frame_ptr, addr as isize)));
                     }
                     let data = self.bytes_to_data(&offsetted(&procedures[proc_index].frame_ptr, addr as isize).to_le_bytes());
                     push_data(&mut stack, data);
@@ -417,17 +417,17 @@ impl PL0VM {
                 OpCode::PushConstant => {
                     let c = pop_argument(&mut pc);
                     if c < 0 {
-                        error(&format!("tried to push value of constant with invalid index: {c}"));
+                        error(&t!("pl0.invalid_constant", c = c));
                         return;
                     }
                     let cd = constants[c as usize].clone();
-                    if self.debug { print!("constant {c} => pushing {}", cd.i64()); }
+                    if self.debug { print!("{}", t!("pl0.pushed_constant", c = c, val = cd.i64())); }
                     push_data(&mut stack, cd);
                 }
                 OpCode::StoreValue => {
                     let data = pop_data(&mut stack);
                     let addr = pop_data(&mut stack).i64();
-                    if self.debug { print!("value {} at address {}", data.i64(), addr) }
+                    if self.debug { print!("{}", t!("pl0.stored_value", val = data.i64(), addr = addr)) }
                     set_addr(&mut stack, &(addr as usize), &data);
                 }
 
@@ -441,7 +441,7 @@ impl PL0VM {
                 }
                 OpCode::InputToAddr => {
                     let addr = pop_data(&mut stack);
-                    if self.debug { println!("to address {}", addr.i64()); }
+                    if self.debug { println!("{}", t!("pl0.to_address", addr = addr.i64())); }
                     // wait for user to input a valid number
                     'input_loop: loop {
                         let mut line = String::new();
@@ -453,7 +453,7 @@ impl PL0VM {
                                 break 'input_loop;
                             },
                             Err(_) => {
-                                error("invalid number input");
+                                error(&t!("pl0.invalid_number_input"));
                             }
                         }
                     }
@@ -557,15 +557,15 @@ impl PL0VM {
                 OpCode::Jump => {
                     let offset = pop_argument(&mut pc);
                     pc = offsetted(&pc, offset as isize);
-                    if self.debug { print!("jumping to {pc}"); }
+                    if self.debug { print!("{}", t!("pl0.jumping_to", pc = pc:{:04X})); }
                 }
                 OpCode::JumpIfFalse => {
                     let dat = pop_data(&mut stack).i64();
                     let offset = pop_argument(&mut pc);
-                    if self.debug { print!("jumping: {}", dat == 0); }
+                    if self.debug { print!("{}", t!("pl0.jumping_if_bool", bool = dat == 0)); }
                     if dat == 0 {
                         pc = offsetted(&pc, offset as isize);
-                        if self.debug { print!(" to {pc:04X}"); }
+                        if self.debug { print!("{}", t!("pl0.jumping_if_where", pc = pc:{:04X})); }
                     }
                 }
 
@@ -575,7 +575,7 @@ impl PL0VM {
                     let str = match String::from_utf8(bytes) {
                         Ok(str) => str,
                         Err(err) => {
-                            error(&format!("\ninvalid string contents: {}", err));
+                            error(&format!("\n{}", t!("pl0.invalid_str", err = err)));
                             break;
                         }
                     };
@@ -588,7 +588,7 @@ impl PL0VM {
 
                 OpCode::Pop => {
                     if self.debug {
-                        println!("popped {}", pop_data(&mut stack).i64());
+                        println!("{}", t!("pl0.popped", data = pop_data(&mut stack).i64()));
                     } else {
                         pop_data(&mut stack);
                     }
@@ -596,7 +596,7 @@ impl PL0VM {
                 OpCode::Swap => {
                     let offset = pop_data(&mut stack).i64();
                     let data = self.bytes_to_data(&stack[(offset as usize)..]);
-                    if self.debug { print!("address {} => data {}", offset as usize, data.i64()) }
+                    if self.debug { print!("{}", t!("pl0.swapped", addr = offset as usize, val = data.i64())) }
                     push_data(&mut stack, data);
                 }
 

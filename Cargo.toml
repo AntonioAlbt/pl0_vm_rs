@@ -1,7 +1,9 @@
 [package]
 name = "pl0_vm_rs"
-version = "1.0.2"
+version = "1.1.0"
 edition = "2021"
 
 [dependencies]
 num_enum = "0.7.5"
+rust-i18n = "3.1.5"
+sys-locale = "0.3.2"
