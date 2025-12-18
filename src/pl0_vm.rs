@@ -279,11 +279,12 @@ impl PL0VM {
         // --- architecture check ---
         let arch_bytes = self.read_arg(ARG_SIZE);
         if self.debug {
+            let invalid = t!("pl0.invalid");
             println!("\t@0000: {:<21}{arch_bytes:04X} = {}", t!("pl0.set_arch"), match arch_bytes {
                 2 => "16 bit",
                 4 => "32 bit",
                 8 => "64 bit",
-                _ => &t!("pl0.invalid"),
+                _ => &invalid,
             });
         }
         if arch_bytes != 2 && arch_bytes != 4 && arch_bytes != 8 {
