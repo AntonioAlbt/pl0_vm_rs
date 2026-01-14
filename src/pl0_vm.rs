@@ -382,8 +382,8 @@ impl PL0VM {
                     push_data(&mut stack, data);
                 }
                 OpCode::PushValueGlobalVar => {
-                    let proc_index = pop_argument(&mut pc) as usize;
                     let addr = pop_argument(&mut pc);
+                    let proc_index = pop_argument(&mut pc) as usize;
                     if addr < 0 {
                         error(&t!("pl0.invalid_global_var_val", addr = addr, proc_index = proc_index));
                         return;
