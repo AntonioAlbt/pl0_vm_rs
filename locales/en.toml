@@ -16,7 +16,7 @@ no_filename = "Filename is missing. View usage information with: pl0_vm_rs --hel
 file_error = "Error when opening file: %{file}"
 
 [pl0]
-invalid_file = "Invalid CL0 file. Does the file contain compiled PL0 bytecode?"
+invalid_file = "Invalid CL0 file. Does the file contain compiled PL0 bytecode?\n\nThe file is either shorter than 4 bytes or the architecture bytes (byte 3 and 4) are invalid. (allowed: 0x0200, 0x0400 oder 0x0800)"
 
 procedure_count = "Procedure count"
 arch = "Architecture"
@@ -60,3 +60,12 @@ jumping_if_where = " to 0x%{pc}"
 
 popped = "popped %{data}"
 swapped = "address %{addr} => data %{val}"
+
+[pl0.error]
+invalid_pc = "Program counter is invalid (attempted new value: %{pc}). This happens because the VM is either expecting more data (due to an incorrect procedure count or length) or because of an invalid jump.\nFor more info on the error location, use -d for debug mode."
+invalid_arg_read = "The VM attempted to read an argument, but no more data is available. (Expected at address %{addr})"
+invalid_constant_read = "Invalid constant read attempt. Likely the file size is not divisible by 2/4/8. (Expected constant index: %{i})"
+failed_arch_read = "Error reading the architecture bytes."
+preload_error = "Procedures and constants could not be loaded. Either the procedure count or the length of one or more procedures is incorrect, or the constants are not arranged correctly."
+invalid_stack_read = "Error reading data from the stack. Start the VM with -d for debug mode to see the execution flow leading up to the error."
+invalid_preload_procedure = "Error processing procedures. Invalid ID. Either the procedure count is incorrect, or there was a problem with the structure of the CL0 file."

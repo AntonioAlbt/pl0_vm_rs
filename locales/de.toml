@@ -16,7 +16,7 @@ no_filename = "Dateiname fehlt. Infos zur Verwendung mit: pl0_vm_rs --help"
 file_error = "Fehler beim Öffnen der Datei: %{file}"
 
 [pl0]
-invalid_file = "Ungültige CL0-Datei. Enthält die Datei kompilierten PL0-Bytecode?"
+invalid_file = "Ungültige CL0-Datei. Enthält die Datei kompilierten PL0-Bytecode?\n\nDie Datei ist entweder kleiner als 4 Bytes, oder die Architekturbytes (Byte 3 und 4) sind ungültig. (erlaubt: 0x0200, 0x0400 oder 0x0800)"
 
 procedure_count = "Prozeduren"
 arch = "Architektur"
@@ -60,3 +60,12 @@ jumping_if_where = " zu 0x%{pc}"
 
 popped = "%{data} gepopped"
 swapped = "Adresse %{addr} => Wert %{val}"
+
+[pl0.error]
+invalid_pc = "Programm-Counter ist ungültig (versuchter neuer Wert: %{pc}). Dies passiert, weil die VM entweder noch mehr Daten erwartet (aufgrund einer falschen Prozeduranzahl oder -länge) oder wegen eines ungültigen Sprungs.\nFür mehr Infos zur Fehlerstelle, verwende -d für den Debug Modus."
+invalid_arg_read = "Die VM versuchte, ein Argument zu lesen, aber es sind keine Daten mehr vorhanden. (erwartet an Stelle %{addr})"
+invalid_constant_read = "Ungültiger Leseversuch einer Konstanten. Wahrscheinlich ist die Dateigröße nicht durch 2/4/8 teilbar. (erwarteter Konstanten-Index: %{i})"
+failed_arch_read = "Fehler beim Lesen der Architekturbytes."
+preload_error = "Prozeduren und Konstanten konnten nicht geladen werden. Entweder stimmt die Prozeduranzahl oder die Länge einer oder mehrerer Prozeduren nicht, oder die Konstanten sind nicht richtig angeordnet."
+invalid_stack_read = "Fehler beim Lesen von Daten vom Stack. VM mit -d für Debug-Modus starten, um Ablauf bis zum Fehler zu sehen."
+invalid_preload_procedure = "Fehler beim Verarbeiten der Prozeduren. Ungültige ID. Entweder ist die Prozeduranzahl falsch, oder es gab ein Problem mit dem Aufbau der CL0-Datei."
